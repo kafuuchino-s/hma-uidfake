@@ -33,6 +33,17 @@ extern void security_cred_getsecid(const struct cred *cred, u32 *secid);
 
 #include "uidfake.h"
 
+/* Inspect presence under the kernel's own lock without acquiring a user ref.
+ * These are data addresses, never callable targets.  find_user's raw body is
+ * retained only for the hash decoder. */
+#ifndef UIDFAKE_HOST_BUILD
+static spinlock_t *uf_uidhash_lock;
+static struct hlist_head *uf_uidhash_table;
+static unsigned long uf_find_user_body;
+#else
+#define uf_find_user_body find_user
+#endif
+
 /*
  * One immutable policy snapshot behind an RCU pointer: a query reads the
  * pointer once and then only touches that snapshot, so it needs no lock and can
@@ -149,7 +160,7 @@ static bool uid_hash_bits_ok(u32 bits)
  */
 static bool detect_uid_hash(struct uid_hash *out)
 {
-	const u32 *code = (const u32 *)find_user;
+	const u32 *code = (const u32 *)uf_find_user_body;
 	u32 i;
 
 	for (i = 0; i + 4 < 128; i++) {
@@ -228,6 +239,35 @@ static bool detect_uid_hash(struct uid_hash *out)
 	return false;
 }
 
+static bool uid_present(u32 candidate)
+{
+	struct user_struct *user;
+#ifdef UIDFAKE_HOST_BUILD
+	user = find_user(KUIDT_INIT(candidate));
+	if (!user)
+		return false;
+	free_uid(user);
+	return true;
+#else
+	unsigned long flags;
+	bool present = false;
+
+	/* user.c inserts/removes under this lock.  No pointer escapes it, so
+	 * no user reference (or later free_uid call) is needed. */
+	spin_lock_irqsave(uf_uidhash_lock, flags);
+	hlist_for_each_entry(user,
+			     &uf_uidhash_table[uid_hash_apply(&g_hash, candidate)],
+			     uidhash_node) {
+		if (uid_eq(user->uid, KUIDT_INIT(candidate))) {
+			present = true;
+			break;
+		}
+	}
+	spin_unlock_irqrestore(uf_uidhash_lock, flags);
+	return present;
+#endif
+}
+
 static u32 make_replace(u32 target)
 {
 	u32 want = uid_hash_apply(&g_hash, target);
@@ -235,14 +275,11 @@ static u32 make_replace(u32 target)
 
 	for (k = 0; k < POLICY_REPL_MAX; k++) {
 		u32 cand = POLICY_REPL_BASE + k;
-		struct user_struct *us;
 
 		if (uid_hash_apply(&g_hash, cand) != want)
 			continue;
-		us = find_user(KUIDT_INIT(cand));
-		if (!us)
+		if (!uid_present(cand))
 			return cand;
-		free_uid(us);
 	}
 
 	pr_warn("uidfake: no same-bucket replacement for %u among %u candidates\n",
@@ -1729,6 +1766,21 @@ static void policy_reset(void)
 
 int policy_init(void)
 {
+#ifndef UIDFAKE_HOST_BUILD
+	struct uid_hash hash;
+
+	uf_uidhash_lock = (void *)uidfake_lookup_raw("uidhash_lock");
+	uf_uidhash_table = (void *)uidfake_lookup_raw("uidhash_table");
+	uf_find_user_body = uidfake_lookup_raw("find_user");
+	if (!uf_uidhash_lock || !uf_uidhash_table || !uf_find_user_body)
+		return -ENOENT;
+	/* This data layout is tied to the target 5.4 headers.  Do not index
+	 * its table if the decoded kernel hash disagrees with that layout. */
+	if (!detect_uid_hash(&hash) || hash.multiply ||
+	    hash.bits != (CONFIG_BASE_SMALL ? 3 : 7))
+		return -EINVAL;
+	g_hash = hash;
+#endif
 	policy_reset();
 	return 0;
 }

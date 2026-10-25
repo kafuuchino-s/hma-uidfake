@@ -1,0 +1,35 @@
+{
+  "upstream_commit": "dcc8c1993f355de083d1beca834da423c0ae2098",
+  "port_patch_sha256": "fb398128bf8d197e6ce220ba049da7b0bb91ee38637bef9b5e7f9515603aa324",
+  "kernel": {
+    "gnu_build_id": "fa100a608d841472",
+    "notes_sha256": "2860d6481e7bb3ece42a4fb675d4c682e803e6dcf4bbd6e38d2143a98926f724",
+    "config_sha256": "9751e53f21287e8a75b3338eb34172dcd19692e58fc6a6c39da77c7259bb0516",
+    "symvers_sha256": "53964fb71bad1219cd425a24fdadcbbb016c6558872dd9d76d6b30f746d01613",
+    "module_layout": "0x894a26ae",
+    "va_bits": 39,
+    "page_shift": 12,
+    "cfi": true,
+    "shadow_call_stack": true,
+    "modversions": true,
+    "module_force_load": false
+  },
+  "payloads": {
+    "hma_uidfake.ko": {
+      "bytes": 1156048,
+      "sha256": "564671a5fe20c3aba3c7a959441c35f0dfaa3188c98368342ae1f7c6ba486025"
+    },
+    "load-ko": {
+      "bytes": 6256,
+      "sha256": "be98c4ead3142fe2d1dbf0b4fa481a3db3a191e4cdec6c36be72da72a4fddf62"
+    },
+    "kauxctl": {
+      "bytes": 1002208,
+      "sha256": "b391fded1400b50a41567574d847af8560eddfeae685d5a8c1792f4596d87848"
+    },
+    "sync-tool": {
+      "bytes": 1476080,
+      "sha256": "b74c25c75107638928d09d4c2853e039a9f592973e2c666567726e7b92bcd9ab"
+    }
+  }
+}

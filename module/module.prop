@@ -1,8 +1,6 @@
-id=hma-uidfake
-name=HMA UID Fake
-# Fallback only: the build replaces these two with the git tag and the short hash.
-version=0.1.0
-versionCode=1000
-author=Kodatemitsuru
-description=Fake UID for apps that are "risk", so that they can not be detected by uid scanners. This module is for advanced users only, and it may cause issues with some apps. Use at your own risk.
-updateJson=https://github.com/KodateMitsuru/hma-uidfake/releases/latest/download/update.json
+id=hma_uidfake_mix4
+name=HMA UID Fake (MIX4 5.4)
+version=0.3.3-mix4.1
+versionCode=303001
+author=KodateMitsuru, Anatdx; MIX4 port: kafuuchino-s
+description=Native UID policy sync for the validated MIX4 5.4 kernel; reboot required after install or disable.

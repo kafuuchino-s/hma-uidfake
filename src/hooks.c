@@ -714,9 +714,9 @@ static int patch_tables(void)
 		return -ENOENT;
 	/* Real addresses go behind the debug key: dmesg is readable on plenty of devices. */
 	if (UF_DEBUG_ON())
-		pr_info("uidfake: sys_call_table=%px locator check: find_user=%px linked=%px\n",
+		pr_info("uidfake: sys_call_table=%px locator check: find_user=%px body=%px\n",
 			(void *)table, (void *)uidfake_lookup("find_user"),
-			(void *)find_user);
+			(void *)uf_find_user_body);
 
 	g_status.native_expected = ARRAY_SIZE(g_hook);
 #ifdef CONFIG_COMPAT

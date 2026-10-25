@@ -26,6 +26,12 @@
 
 #include "uidfake.h"
 
+/* arm64 5.4 names block descriptors *_sect rather than *_leaf. */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 5, 0)
+#define pud_leaf pud_sect
+#define pmd_leaf pmd_sect
+#endif
+
 static int probe_noop(struct kprobe *p, struct pt_regs *r)
 {
 	return 0;
@@ -309,7 +315,15 @@ int uidfake_patch_init(void)
 			patch_mm, (void *)g_kimage_voffset,
 			(void *)g_memstart_addr, (void *)g_set_fixmap_addr,
 			(void *)g_copy_nofault_addr);
-	if (!patch_mm || !g_set_fixmap_addr)
+	/* The same nofault-copy contract has the older probe_kernel_* names. */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 5, 0)
+	if (!g_copy_nofault_addr)
+		g_copy_nofault_addr = uidfake_lookup("probe_kernel_write");
+	if (!g_copy_from_nofault_addr)
+		g_copy_from_nofault_addr = uidfake_lookup("probe_kernel_read");
+#endif
+	if (!patch_mm || !g_set_fixmap_addr || !g_copy_nofault_addr ||
+	    !g_copy_from_nofault_addr)
 		return -ENOENT;
 
 	/*

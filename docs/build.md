@@ -1,51 +1,34 @@
-# Build and tests
+# MIX4 normal build and package entry
 
-Each KMI builds with the compiler its kernel was built with: clang CFI and the shadow call stack
-come from that compiler, so mixing is not an option. kbuild links the module itself and writes its
-objects into its `M=` directory, so each KMI builds in `build/kmi/<kmi>/`, a directory holding only
-symlinks to `src/`.
+Use Python 3.9+ and the repository's build.sh (or python3 tools/mix4.py). Generated objects, logs and packages must stay outside the source checkout. No kernel or private configuration is downloaded.
 
-The version and `versionCode` in the packed `module.prop` come from the git tag (falling back to the
-values in `module/module.prop` for a tree without git). `-DUG_USE_PREBUILT_KO=ON` packs the modules
-already in `build/ko`, which is how the CI packaging job assembles a zip from separately built KMI
-jobs.
+## Reuse the validated payloads
 
-The zip also carries `sync-tool` (built from `src/tools`) and `lkmloader` (built from the
-`external/lkmloader` submodule, an upstream MIT project pinned by `.gitmodules` + gitlink).
-`lkmloader` is what the module's scripts load the ko with: it does not depend on a particular
-root solution, which is why it is bundled.
-Clone with `--recurse-submodules`, or run `git submodule update --init`.
+Supply an artifact directory with hma_uidfake.ko, load-ko, kauxctl and sync-tool. verify checks the fixed approved hashes and ELF architecture; package additionally requires a clean committed source tree and binds its commit/tree into package.json.
 
-## Tests
+    ./build.sh verify --artifacts /absolute/path/to/payloads
+    ./build.sh package --artifacts /absolute/path/to/payloads --out /absolute/path/to/hma_uidfake_mix4.zip
 
-- `scripts/run-hosttest.sh` compiles the real `src/policy.c` against the `linux/*` shims in
-  `scripts/hosttest/` and checks every configured `(caller, target)` pair, and the same for the ABX
-  reader against the first bytes of a real `packages.xml`. Real sources, so word sizes, field order
-  and the encoding of a branch written into kernel text are covered.
-- `scripts/branch_encode_test.c` checks the branch encoding on its own, in user space.
-- `scripts/config_paths_test.cpp` builds a tree and checks the rule-source specs: an exact file, an
-  HMA-OSS data directory named with a random suffix, and specs that match nothing yet.
-- `scripts/rules_test.cpp` drives both rule formats with configs instead of a device: HMA's hidden
-  set and built-in list, and HMA-OSS's decision chain with its opposite list and presets.
-- `scripts/lookup_model.py` states what a query touches as a function of `(caller, target)` and the
-  load counts, which the C cannot assert about itself.
-- `scripts/check-undefined.sh` checks every undefined symbol against the DDK's per-KMI
-  `Module.symvers`, the same table kbuild uses; `scripts/test-kmi-map.sh` checks `uname -r` to KMI
-  mapping and that the zip carries the result.
-- `scripts/run-clang-tidy.sh` analyses both halves: the module with the flags kbuild really
-  compiled with, taken from its `.cmd` files, and the userspace helper on its own.
-- `scripts/check-format.sh` covers what neither tool reaches -- the CMake files, the shell scripts,
-  the module template, the workflow -- and runs `clang-format --dry-run` over every source file. The
-  module and the test sources use the kernel's `.clang-format`, `src/tools/` uses LLVM's.
+The package contains only the reviewed lifecycle scripts, the four payloads, GPL license, source mapping and payload checksums. No upstream rewriting loader, private rule list, service template or generated binary is committed.
 
-## uidbench
+## Build user tools with an existing NDK
 
-Not part of the build. Cross-compile and run it as an app uid that hides:
+The tested toolchain is Android NDK r27d (27.3.13750724), Clang 18.0.4, API33/arm64, static libc++ and dynamic Android system libraries. The JSON single-header input is nlohmann/json v3.11.3 at 9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03, SHA-256 9bea4c8066ef4a1c206b2be5a36302f8926f7fdc6087af5d20b417d0cf103ea6. Supply that existing header; the entry does not download a toolchain or dependency automatically.
 
-```bash
-$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang \
-  -O2 -static -o uidbench src/tools/uidbench.c
-```
+    ./build.sh tools --ndk /absolute/android-ndk-r27d --json-header /absolute/nlohmann/json.hpp --out /absolute/build-tools
 
-It samples the hidden, absent and unhooked cases in the same round and reports paired deltas, t
-statistics and the sample count an attacker would need for a 5 sigma decision.
+The helper uses the author's original 13 translation units. kauxctl links the original netlink/paging client and shared protocol header; its status mode does not write module.prop. load-ko makes only one normal finit_module call. Build concurrency is at most two. Source/header paths can change helper bytes as well; rebuilt outputs remain review candidates until their exact hashes have the required evidence.
+
+## Build the kernel module through normal external Kbuild
+
+Supply the matching prepared kernel tree/output, its original recipe, and AOSP Clang 11.0.2. The entry copies only generated headers/configuration and host build helpers to a separate output. It invokes only the normal external modules target, including modpost/.mod.o/.ko; it never runs the kernel's build.sh or writes the supplied kernel output.
+
+    ./build.sh module --kernel /absolute/kernel --kernel-out /absolute/kernel/out --recipe /absolute/kernel/configs/dream-3.0.308.0/odin.json --clang-bin /clang/bin --out /absolute/build-module
+
+The copied input config and Module.symvers must match the approved target. CFI/SCS/LTO and normal CRC/vermagic checks remain enabled. Changed debug/source paths can change the KO hash; build output is a review candidate, not automatic approval. The initial package intentionally reuses the byte-identical proven KO. If verify rejects a rebuilt hash, obtain the corresponding full ABI/actual kernel-and-module CFI/runtime evidence before changing config/approved.json.
+
+## Validate a new maintained version
+
+Keep the source commit, both kernel dependency pins, toolchain, config and outputs bound. Require normal imports/CRCs, no duplicate exports, the real CFI caller/target tables, the lifecycle scripts and cold-boot runtime counters. An existing approved hash must never be changed merely to silence a mismatch. No nocfi addition, CFI/SCS disable, export/CRC/vermagic alteration or rewriting-loader fallback is accepted by this entry.
+
+The upstream docs/design.md describes the general policy design; the locked UID-presence check in src/policy.c and this branch's lifecycle scripts define the 5.4 port. In particular, native getpriority ESRCH is not an existence oracle for user_struct.

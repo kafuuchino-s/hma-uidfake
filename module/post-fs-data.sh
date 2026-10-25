@@ -1,18 +1,26 @@
 #!/system/bin/sh
-# Load the module before the framework starts: the reads a child does before its window
-# closes have to be covered. lkmloader is the loader: it is shipped here, it needs no root
-# solution to be installed, and it is what resolves the ko's undefined symbols from
-# /proc/kallsyms and, when the kernel names the vermagic it wants, writes that in and
-# retries.
-MODDIR=${0%/*}
-KO="$MODDIR/ko/hma_uidfake.ko"
-LOG="$MODDIR/state/sync.log"
-mkdir -p "$MODDIR/state"
-[ -f "$KO" ] || exit 0
-lsmod | grep -q '^hma_uidfake ' && exit 0
-
-[ -x "$MODDIR/lkmloader" ] || { echo "[load] no lkmloader" >>"$LOG"; exit 0; }
-"$MODDIR/lkmloader" "$KO" >>"$LOG" 2>&1
-_rc=$?
-echo "[load] lkmloader rc=$_rc $(date '+%m-%d %H:%M:%S')" >>"$LOG"
-lsmod | grep -q '^hma_uidfake ' || echo "[load] not loaded; no ko for this kernel? see the customize.sh note" >>"$LOG"
+# SPDX-License-Identifier: GPL-2.0
+umask 077
+MODDIR=$(dirname "$0")
+. "$MODDIR/common.sh"
+[ ! -e "$MODDIR/disable" ] && [ ! -e "$MODDIR/remove" ] || exit 0
+mkdir -p "$MODDIR/state" || exit 1
+chmod 0700 "$MODDIR/state"
+exec 9>"$MODDIR/state/load.lock"
+"$BB" flock -n 9 || exit 0
+BOOT=$(cat /proc/sys/kernel/random/boot_id) || exit 1
+[ "$(cat "$MODDIR/state/load-attempt" 2>/dev/null)" != "$BOOT" ] || exit 0
+printf '%s\n' "$BOOT" >"$MODDIR/state/load-attempt"
+printf '%s\n' "$BOOT" >"$MODDIR/state/boot_id"
+exec >>"$MODDIR/state/load.log" 2>&1
+echo "[post-fs-data] boot=$BOOT time=$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+kernel_bound && payloads_bound || { echo '[load] refused: binding failed'; exit 1; }
+if module_live; then
+  echo '[load] already present; no second load attempt'
+  exit 0
+fi
+"$MODDIR/load-ko" "$MODDIR/ko/hma_uidfake.ko"
+RC=$?
+echo "[load] finit_module flags=0 rc=$RC"
+[ "$RC" -eq 0 ] && module_live && hooks_ready || { echo '[load] failed or hooks incomplete'; exit 1; }
+echo '[load] normal load and hooks verified'
