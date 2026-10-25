@@ -705,7 +705,7 @@ static void unpatch_entries(uidfake_syscall_t *table, struct hook_entry *e,
 	}
 }
 
-static int patch_tables(void)
+static int __maybe_unused patch_tables(void)
 {
 	unsigned long table = uidfake_lookup("sys_call_table");
 	unsigned int n;
@@ -785,8 +785,58 @@ static int patch_tables(void)
 	return 0;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
+static int hooks_install_419(void)
+{
+	struct uidfake_patch_slot slots[UIDFAKE_INIT_SLOTS];
+	unsigned int i;
+	int rc = uidfake_patch_init();
+
+	if (rc)
+		return rc;
+#ifndef CONFIG_COMPAT
+	return -EOPNOTSUPP;
+#else
+	BUILD_BUG_ON(ARRAY_SIZE(g_hook) != 4 || ARRAY_SIZE(g_chook) != 4);
+	main_table = (void *)uidfake_lookup_raw("sys_call_table");
+	compat_table = (void *)uidfake_lookup_raw("compat_sys_call_table");
+	if (!main_table || !compat_table)
+		return -ENOENT;
+	for (i = 0; i < 8; i++) {
+		struct hook_entry *entry = i < 4 ? &g_hook[i] : &g_chook[i - 4];
+		uidfake_syscall_t *table = i < 4 ? main_table : compat_table;
+		uidfake_syscall_t *slot = find_slot(table, entry);
+
+		if (!slot || !READ_ONCE(*slot) || READ_ONCE(*slot) == entry->ours) {
+			pr_err("uidfake: required syscall slot absent: %s\n", entry->sym);
+			return -ENOENT;
+		}
+		entry->orig = READ_ONCE(*slot);
+		slots[i].slot = (void **)slot;
+		slots[i].before = (void *)entry->orig;
+		slots[i].after = (void *)entry->ours;
+	}
+	rc = uidfake_lsm_prepare(&slots[8]);
+	if (rc)
+		return rc;
+	rc = uidfake_patch_initial(slots);
+	if (rc)
+		return rc; /* all errors are before publication */
+	g_status.native_expected = 4;
+	g_status.compat_expected = 4;
+	uidfake_status_set_hooks(4, 4);
+	uidfake_lsm_committed();
+	uidfake_tag_prime();
+	return 1;
+#endif
+}
+#endif
+
 int hooks_install(void)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
+	return hooks_install_419();
+#else
 	if (uidfake_patch_init())
 		return 0;
 
@@ -825,6 +875,7 @@ int hooks_install(void)
 
 	pr_warn("uidfake: could not hook sys_call_table, no hook installed\n");
 	return 0;
+#endif
 }
 
 void hooks_remove(void)

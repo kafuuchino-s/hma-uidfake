@@ -129,6 +129,37 @@ static void *uf_resolve_target(void)
 	return NULL;
 }
 
+/* Resolve the exact capability entry without publishing a callback. */
+int uidfake_lsm_prepare(struct uidfake_patch_slot *patch)
+{
+	unsigned long heads_addr = uidfake_lookup_raw("security_hook_heads");
+	struct security_hook_heads *heads = (void *)heads_addr;
+	struct security_hook_list *e;
+	void *target = uf_resolve_target();
+
+	if (!heads || !target || !g_target_name ||
+	    strcmp(g_target_name, "cap_task_fix_setuid"))
+		return -ENOENT;
+	hlist_for_each_entry(e, &heads->task_fix_setuid, list) {
+		void **slot = (void **)&e->hook.task_fix_setuid;
+
+		if (READ_ONCE(*slot) != target)
+			continue;
+		g_orig = target;
+		g_slot = slot;
+		patch->slot = slot;
+		patch->before = target;
+		patch->after = (void *)uf_fix_setuid;
+		return 0;
+	}
+	return -ENOENT;
+}
+
+void uidfake_lsm_committed(void)
+{
+	uidfake_status_set_lsm(KAUX_LSM_TAKEN, 0, g_target_name);
+}
+
 static int uf_lsm_install(void)
 {
 	unsigned long heads_addr = uidfake_lookup("security_hook_heads");

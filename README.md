@@ -1,4 +1,11 @@
-# HMA UID Fake — MIX4 5.4 port
+# HMA UID Fake — elish 4.19 port
+
+The active local branch is `elish-4.19`. Read [ELISH.md](ELISH.md) and
+[module/README.md](module/README.md) for its exact GPL-resolver kernel binding,
+new tablet approval and standard package. The original MIX4 material below is
+retained as historical reference; its approvals and commands target that device.
+
+## Historical MIX4 5.4 reference
 
 Maintenance fork: https://github.com/kafuuchino-s/hma-uidfake , branch mix4-5.4.
 

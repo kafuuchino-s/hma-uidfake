@@ -17,12 +17,14 @@
 #include <asm/cacheflush.h>
 #include <asm/fixmap.h>
 #include <asm/pgtable.h>
+#include <linux/kallsyms.h>
 #include <linux/kprobes.h>
 #include <linux/version.h>
 #include <linux/mm.h>
 #include <linux/slab.h>
 #include <linux/stop_machine.h>
 #include <linux/string.h>
+#include <linux/vmalloc.h>
 
 #include "uidfake.h"
 
@@ -32,10 +34,12 @@
 #define pmd_leaf pmd_sect
 #endif
 
+#if IS_ENABLED(CONFIG_KPROBES) && !defined(UIDFAKE_ELISH_GPL_RESOLVER)
 static int probe_noop(struct kprobe *p, struct pt_regs *r)
 {
 	return 0;
 }
+#endif
 
 /*
  * Symbol lookup, the way KernelSU does it on arm64: resolve a name through
@@ -44,10 +48,10 @@ static int probe_noop(struct kprobe *p, struct pt_regs *r)
  * table when kallsyms_lookup_name() cannot be had. Nothing here reads an offset
  * out of a function body.
  *
- * kallsyms_lookup_name() and kallsyms_on_each_symbol() are not exported to
- * modules, so their own addresses come from a probe registered on them -- kprobe
- * resolves .symbol_name through kallsyms internally -- unregistered immediately,
- * so nothing stays behind.
+ * The elish 4.19 build imports the target kernel's standard GPL export of
+ * kallsyms_lookup_name directly. Symbol visibility settings are preserved;
+ * this path never reads procfs or reconstructs a resolver address. Other
+ * supported builds retain their original transient-probe bootstrap.
  */
 /*
  * Pre-kCFI kernels (before 6.1) check an indirect call against the callee's jump
@@ -59,6 +63,9 @@ static int probe_noop(struct kprobe *p, struct pt_regs *r)
 
 static unsigned long lookup_exported(const char *symbol)
 {
+#ifdef UIDFAKE_ELISH_GPL_RESOLVER
+	return kallsyms_lookup_name(symbol);
+#elif IS_ENABLED(CONFIG_KPROBES)
 	struct kprobe kp = { .symbol_name = symbol, .pre_handler = probe_noop };
 	unsigned long addr;
 
@@ -67,19 +74,26 @@ static unsigned long lookup_exported(const char *symbol)
 	addr = (unsigned long)kp.addr;
 	unregister_kprobe(&kp);
 	return addr;
+#else
+	return 0;
+#endif
 }
 
 /*
- * The call goes to an address kallsyms handed us, and on a pre-kCFI kernel the
- * indirect-call check consults the callee's jump table: a function that reaches a
+ * The elish GPL profile calls the normal exported function directly. Legacy
+ * indirect-call checks consult the callee's jump table: a function that reaches a
  * resolved address is marked __nocfi, the way KernelSU marks its dispatcher.
  */
 static noinline unsigned long __nocfi lookup_name(const char *name)
 {
+#ifdef UIDFAKE_ELISH_GPL_RESOLVER
+	return kallsyms_lookup_name(name);
+#else
 	unsigned long (*fn)(const char *) =
 		(void *)lookup_exported("kallsyms_lookup_name");
 
 	return fn ? fn(name) : 0;
+#endif
 }
 
 struct find_ctx {
@@ -217,10 +231,40 @@ unsigned long uidfake_lookup_raw(const char *name)
 		return ctx.addr;
 	}
 }
+/* Called once from module_init, before policy, netlink or any hook exists. */
+int uidfake_resolver_init(void)
+{
+	static const char *const required[] = {
+		"kallsyms_lookup_name", "kallsyms_on_each_symbol",
+		"copy_from_kernel_nofault", "copy_to_kernel_nofault",
+		"_stext", "_end", "init_mm", "kimage_voffset",
+		"memstart_addr", "__set_fixmap", "uidhash_lock",
+		"uidhash_table", "find_user", "security_hook_heads",
+		"cap_task_fix_setuid", "sys_call_table", "kern_path",
+		"__arm64_sys_getpriority", "__arm64_sys_setpriority",
+		"__arm64_sys_ioprio_get", "__arm64_sys_ioprio_set",
+#ifdef CONFIG_COMPAT
+		"compat_sys_call_table",
+#endif
+	};
+	unsigned int i;
+
+	if (!IS_ENABLED(CONFIG_KALLSYMS) || !IS_ENABLED(CONFIG_KALLSYMS_ALL))
+		return -EOPNOTSUPP;
+	for (i = 0; i < ARRAY_SIZE(required); i++) {
+		if (!uidfake_lookup_raw(required[i])) {
+			pr_err("uidfake: required core symbol unavailable: %s\n",
+			       required[i]);
+			return -ENOENT;
+		}
+	}
+	return 0;
+}
+
 /*
  * Symbols the patcher needs at run time. init_mm is not exported,
- * kimage_voffset/kallsyms are not either, so all of them go through the same
- * transient-probe resolver.
+ * kimage_voffset is not either, so they use the selected normal resolver.
+ * The elish GPL profile depends on the standard exported lookup's CRC.
  */
 static struct mm_struct *patch_mm;
 
@@ -322,8 +366,9 @@ int uidfake_patch_init(void)
 	if (!g_copy_from_nofault_addr)
 		g_copy_from_nofault_addr = uidfake_lookup("probe_kernel_read");
 #endif
-	if (!patch_mm || !g_set_fixmap_addr || !g_copy_nofault_addr ||
-	    !g_copy_from_nofault_addr)
+	if (!g_text_start || g_text_end <= g_text_start || !patch_mm ||
+	    !g_kimage_voffset || !g_memstart_addr || !g_set_fixmap_addr ||
+	    !g_copy_nofault_addr || !g_copy_from_nofault_addr)
 		return -ENOENT;
 
 	/*
@@ -587,6 +632,81 @@ static int patch_nosync(void *dst, const void *src, size_t len)
 	if (UF_DEBUG_ON())
 		pr_info("uidfake:   %px\n", dst);
 	return ret;
+}
+
+/*
+ * Initial pointer publication has no rollback-after-publication path. All
+ * address validation, page allocation and readable RW/NX alias construction
+ * happen first. The stopped callback checks every old value before any write,
+ * then contains only aligned WRITE_ONCE stores to those established mappings.
+ * No consumer can observe a partly installed set and no fallible operation
+ * follows the first store. This is for the initial nine data pointers only;
+ * it does not claim to make hot unload safe.
+ */
+struct initial_patch {
+	struct uidfake_patch_slot *slots;
+	void **aliases[UIDFAKE_INIT_SLOTS];
+};
+
+static int patch_initial_stopped(void *arg)
+{
+	struct initial_patch *p = arg;
+	unsigned int i;
+
+	for (i = 0; i < UIDFAKE_INIT_SLOTS; i++)
+		if (READ_ONCE(*p->slots[i].slot) != p->slots[i].before ||
+		    READ_ONCE(*p->aliases[i]) != p->slots[i].before)
+			return -EAGAIN;
+	for (i = 0; i < UIDFAKE_INIT_SLOTS; i++)
+		WRITE_ONCE(*p->aliases[i], p->slots[i].after);
+	smp_wmb();
+	return 0;
+}
+
+int uidfake_patch_initial(struct uidfake_patch_slot slots[UIDFAKE_INIT_SLOTS])
+{
+	struct initial_patch p = { .slots = slots };
+	struct page *pages[UIDFAKE_INIT_SLOTS];
+	void *mapping;
+	unsigned int i, j;
+	int rc = -EFAULT;
+
+	for (i = 0; i < UIDFAKE_INIT_SLOTS; i++) {
+		unsigned long addr = (unsigned long)slots[i].slot;
+		phys_addr_t offset, walk;
+
+		if ((addr & (sizeof(void *) - 1)) || !slots[i].before ||
+		    !slots[i].after || addr < g_text_start ||
+		    addr + sizeof(void *) > g_text_end)
+			return -EINVAL;
+		for (j = 0; j < i; j++)
+			if (slots[j].slot == slots[i].slot)
+				return -EINVAL;
+		offset = image_phys(addr);
+		walk = g_walk_usable ? phys_from_virt(addr) : 0;
+		if (!offset || (walk && walk != offset) ||
+		    !pfn_valid(PHYS_PFN(offset)))
+			return -EFAULT;
+		pages[i] = pfn_to_page(PHYS_PFN(offset));
+	}
+	mapping = vmap(pages, UIDFAKE_INIT_SLOTS, VM_MAP, PAGE_KERNEL);
+	if (!mapping)
+		return -ENOMEM;
+	for (i = 0; i < UIDFAKE_INIT_SLOTS; i++) {
+		void *seen;
+
+		p.aliases[i] = (void **)((char *)mapping + i * PAGE_SIZE +
+			offset_in_page((unsigned long)slots[i].slot));
+		if (patch_copy_from_nofault(&seen, p.aliases[i], sizeof(seen)) ||
+		    seen != slots[i].before)
+			goto unmap;
+	}
+	/* stop_machine returns a setup error before calling us, or our callback
+	 * result. Its only error is before the first store above. */
+	rc = stop_machine(patch_initial_stopped, &p, NULL);
+unmap:
+	vunmap(mapping);
+	return rc;
 }
 
 static int patch_do(void *arg)

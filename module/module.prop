@@ -1,6 +1,6 @@
-id=hma_uidfake_mix4
-name=HMA UID Fake (MIX4 5.4)
-version=0.3.3-mix4.1
-versionCode=303001
-author=KodateMitsuru, Anatdx; MIX4 port: kafuuchino-s
-description=Native UID policy sync for the validated MIX4 5.4 kernel; reboot required after install or disable.
+id=hma_uidfake_elish
+name=HMA UID Fake (elish 4.19)
+version=0.3.3-elish.1
+versionCode=303101
+author=KodateMitsuru, Anatdx; MIX4 and elish ports: kafuuchino-s
+description=Native UID policy sync for the exact bound elish 4.19 kernel; reboot required after install or disable.

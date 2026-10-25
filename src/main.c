@@ -49,14 +49,32 @@ void uidfake_debug_init(bool on)
 
 static int __init uidfake_init(void)
 {
-	if (policy_init())
-		return -ENOMEM;
+	int rc = uidfake_resolver_init();
 
+	if (rc)
+		return rc;
+	rc = policy_init();
+	if (rc)
+		return rc;
+	rc = netlink_init();
+	if (rc)
+		goto free_policy;
+	rc = hooks_install();
+	if (rc <= 0) {
+		pr_err("uidfake: initial hook preparation failed: %d\n", rc);
+		rc = rc < 0 ? rc : -EIO;
+		goto close_netlink;
+	}
 	uidfake_debug_init(uidfake_debug);
-
-	netlink_init();
-	pr_info("uidfake: ready (%d hook(s))\n", hooks_install());
+	pr_info("uidfake: ready (native=4 compat=4 LSM=1)\n");
 	return 0;
+
+close_netlink:
+	/* The 4.19 installer returns an error only before callback publication. */
+	netlink_exit();
+free_policy:
+	policy_free();
+	return rc;
 }
 
 static void __exit uidfake_exit(void)

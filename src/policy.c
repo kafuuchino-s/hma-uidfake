@@ -1005,6 +1005,26 @@ static u32 uf_ti_tag(struct task_struct *t)
 		     UF_TAG_MASK);
 }
 
+/* get_task_cred is not exported by the fixed 4.19 tree. Keep its exact
+ * RCU/refcount acquisition sequence locally (kernel/cred.c), without resolving
+ * a new indirect target or weakening the lifetime of the returned cred. */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
+static const struct cred *uf_task_cred_ref(struct task_struct *task)
+{
+	const struct cred *cred;
+
+	rcu_read_lock();
+	do {
+		cred = __task_cred(task);
+		BUG_ON(!cred);
+	} while (!get_cred_rcu(cred));
+	rcu_read_unlock();
+	return cred;
+}
+#else
+#define uf_task_cred_ref get_task_cred
+#endif
+
 void uidfake_tag_prime(void)
 {
 	struct task_struct *task, *thread;
@@ -1013,7 +1033,7 @@ void uidfake_tag_prime(void)
 	rcu_read_lock();
 	for_each_process(task) {
 		for_each_thread(task, thread) {
-			const struct cred *cred = get_task_cred(thread);
+			const struct cred *cred = uf_task_cred_ref(thread);
 			u32 id;
 
 			if (!cred)
@@ -1774,7 +1794,7 @@ int policy_init(void)
 	uf_find_user_body = uidfake_lookup_raw("find_user");
 	if (!uf_uidhash_lock || !uf_uidhash_table || !uf_find_user_body)
 		return -ENOENT;
-	/* This data layout is tied to the target 5.4 headers.  Do not index
+	/* This data layout is tied to the target kernel headers. Do not index
 	 * its table if the decoded kernel hash disagrees with that layout. */
 	if (!detect_uid_hash(&hash) || hash.multiply ||
 	    hash.bits != (CONFIG_BASE_SMALL ? 3 : 7))

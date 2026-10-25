@@ -1,0 +1,68 @@
+{
+  "schema": "elish-uidfake-approved-v1",
+  "base_commit": "0ab1cc0a434cded47001e736475abec9dfb28df1",
+  "base_tree": "b36d23fc48664e4966f84939e2cb3aecd83c45ad",
+  "module": {
+    "id": "hma_uidfake_elish",
+    "version": "0.3.3-elish.1",
+    "version_code": 303101
+  },
+  "kernel": {
+    "source_commit": "a9bec2ab96b256ae78df8261681f1c63add6060b",
+    "bakasu_commit": "fdc26bf136d52cd6e2f3415e215a88096e110e08",
+    "susfs": "tree-integrated 2.3",
+    "GNU_build_id": "a98e5b4c8549e8e2",
+    "notes_sha256": "f97c09b8e6c902eb05b9365dd9010493b324398effb7d6986f82a1d6cb5859d1",
+    "source_config_sha256": "ffa1642d8ca8b3e71362a135e28bbec81c99ae307c3b1aaed86b7a29619d0d09",
+    "visible_config_sha256": "197c535c9ba32d8123f2edeba143c09afe8acf6ee8af801d2e0b91e4291fa279",
+    "visible_config_source": "Original MIUI kernel/Makefile:144 elish_stock-defconfig; parent frozen GPL manifest verifies exact config_data.gz and final ELF/Image IKCFG bytes",
+    "module_symvers_sha256": "6d29f87c54daa0be37d444e82cd00599ccf77588810c166178d351653094ba35",
+    "module_layout": "0x1d786e34",
+    "resolver_import": {
+      "symbol": "kallsyms_lookup_name",
+      "kind": "EXPORT_SYMBOL_GPL",
+      "CRC": "0xe007de41"
+    },
+    "vermagic": "4.19.325-cip135-st19 SMP preempt mod_unload modversions aarch64",
+    "CFI": false,
+    "SCS": false,
+    "KPROBES": false
+  },
+  "module_source_inputs": {
+    "src/Makefile": "b6d1e80d7abdacab190cfacf01e4badcc131d9921080947b5f7f312ab00ceb2e",
+    "src/hooks.c": "9163607420730a0edaac3b3d77f5bae80282026a07823d6d66846f84f79b8463",
+    "src/include/kaux.h": "d79183a4b1059a5587f30630c2049108e060da872fedcb4b9122da5624402f19",
+    "src/include/kmi_compat.h": "963240d2761a200f9170a728aeb5f26bd390b5808466e267598daa9356706052",
+    "src/include/uidfake.h": "66d9c396908f32bfa0d914a9849989245fb8cd745634a055f14eb2603144dd9f",
+    "src/lsm.c": "9dd27b1d89a73036b5ee883a76fbfa88080f32e3472425d093be81976d1aebc2",
+    "src/main.c": "0d9c4ddfaf553c1fb75f2871d6e725c72b6c8be2728012637b0be8e0e50a6f00",
+    "src/netlink.c": "d59c9b9063a5cf58802334a7b299bd5274c06d988a2f35ff3cb52f403600ff96",
+    "src/patch.c": "55ab43a24ba63e0e1fa2eceaf01889baf207c61f23820a38be7b770aab6f9f2b",
+    "src/policy.c": "181db323a861b05e7c8b2145a0b953fa0bc3d57a906c7f4a55496d1d7ec187ab",
+    "src/tools/uidbench.c": "c699de799ae495b54e6db09b65f08cf75a6b47111bff4cdbd1277474ada04361"
+  },
+  "payloads": {
+    "ko/hma_uidfake.ko": {
+      "bytes": 755080,
+      "sha256": "88407b4e3245d2d27d76bd717075077b17f7c1b7a1fb8979d95901383bbc7cdc",
+      "origin": "new normal external Kbuild for frozen elish kernel"
+    },
+    "load-ko": {
+      "bytes": 6256,
+      "sha256": "be98c4ead3142fe2d1dbf0b4fa481a3db3a191e4cdec6c36be72da72a4fddf62",
+      "origin": "unchanged approved NDK r27d Android33 AArch64 tool bytes; see tools-reuse.json"
+    },
+    "kauxctl": {
+      "bytes": 1002208,
+      "sha256": "b391fded1400b50a41567574d847af8560eddfeae685d5a8c1792f4596d87848",
+      "origin": "unchanged approved NDK r27d Android33 AArch64 tool bytes; see tools-reuse.json"
+    },
+    "sync-tool": {
+      "bytes": 1476080,
+      "sha256": "b74c25c75107638928d09d4c2853e039a9f592973e2c666567726e7b92bcd9ab",
+      "origin": "unchanged approved NDK r27d Android33 AArch64 tool bytes; see tools-reuse.json"
+    }
+  },
+  "runtime_verified": false,
+  "device_commands": 0
+}

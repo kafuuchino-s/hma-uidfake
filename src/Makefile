@@ -42,6 +42,11 @@ endif
 obj-m += hma_uidfake.o
 hma_uidfake-objs := main.o patch.o hooks.o lsm.o netlink.o
 
+# The elish 4.19 kernel provides the ordinary GPL-exported name resolver.
+ifeq ($(VERSION).$(PATCHLEVEL),4.19)
+ccflags-y += -DUIDFAKE_ELISH_GPL_RESOLVER=1
+endif
+
 ifeq ($(strip $(LSE_HDR)$(SP_REG)$(KGDB_BRK)),)
 else
 ccflags-y += -include $(MDIR)/include/kmi_compat.h

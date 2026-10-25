@@ -140,6 +140,17 @@ void uidfake_tag_note(u32 before_sid, u32 after_sid, u32 old_uid, u32 new_uid);
 int uidfake_lsm_install(void);
 void uidfake_lsm_remove(void);
 
+/* Initial elish publication: four native, four compat and one capability LSM. */
+#define UIDFAKE_INIT_SLOTS 9
+struct uidfake_patch_slot {
+	void **slot;
+	void *before;
+	void *after;
+};
+int uidfake_patch_initial(struct uidfake_patch_slot slots[UIDFAKE_INIT_SLOTS]);
+int uidfake_lsm_prepare(struct uidfake_patch_slot *slot);
+void uidfake_lsm_committed(void);
+
 /*
  * The status the tool reads over netlink (include/kaux.h). hooks.c owns it,
  * lsm.c and the hook table fill it in as they go.
@@ -160,6 +171,7 @@ void hooks_remove(void);
 
 int uidfake_patch_text(void *dst, const void *src, size_t len, bool sync);
 int uidfake_patch_init(void);
+int uidfake_resolver_init(void);
 unsigned long uidfake_lookup(const char *name);
 
 /*

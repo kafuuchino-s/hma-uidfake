@@ -1,5 +1,5 @@
 #!/system/bin/sh
 # SPDX-License-Identifier: GPL-2.0
 # KernelSU removes this package on reboot. Never hot-unload the kernel module.
-# The old cq switch is deliberately left to the owner; never enable both here.
+# Conflicting UID implementations are never enabled automatically here.
 exit 0
