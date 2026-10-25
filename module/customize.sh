@@ -7,7 +7,7 @@ ui_print "- HMA UID Fake: validated MIX4 5.4 port"
 [ "$ARCH" = arm64 ] || abort "Only arm64 is supported."
 [ "$API" -ge 33 ] || abort "Android API 33 or later is required."
 unzip -o "$ZIPFILE" module.prop common.sh post-fs-data.sh service.sh action.sh uninstall.sh \
-  ko/hma_uidfake.ko load-ko kauxctl sync-tool payload.sha256 package.json LICENSE NOTICE skip_mount -d "$MODPATH" >&2 || abort "Extraction failed."
+  ko/hma_uidfake.ko load-ko kauxctl sync-tool payload.sha256 package.json LICENSE NOTICE README.md skip_mount -d "$MODPATH" >&2 || abort "Extraction failed."
 MODDIR="$MODPATH"
 . "$MODDIR/common.sh"
 kernel_bound || abort "Kernel notes/config do not match the audited target."

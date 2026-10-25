@@ -1,19 +1,11 @@
-# HMA UID Fake
+# HMA UID Fake — MIX4 package
 
-Makes a hidden uid look like it does not exist:
+This package accepts only the full kernel-notes/config hashes in common.sh and the approved four payload hashes. package.json binds the source commit and tree.
 
-```
-getpriority(PRIO_USER, uid)       -> -ESRCH
-ioprio_get(IOPRIO_WHO_USER, uid)  -> -EINVAL
-setpriority / ioprio_set          -> same
-```
+Install through the native BakaSU manager/ksud and reboot normally. Installation stages files only. post-fs-data.sh makes at most one normal finit_module(flags=0) attempt per boot; service.sh never retries a loader and runs one locked instance of the original HMA/package watcher after Android is ready.
 
-The rules come from the app a process was born from, so an isolated child or anything that called
-`setuid()` cannot choose which of them apply. The repository README has the rest.
+Use the module action for real STATUS counters. Keep cq_uid_seccomp disabled to avoid two filtering methods. HMA rules/templates are not written.
 
-`customize.sh` picks the `ko/` entry matching `uname -r`, renames it to `ko/hma_uidfake.ko` and
-removes the rest. With nothing for your kernel it leaves the closest build as
-`ko/hma_uidfake.ko.try`, prints why another KMI's build will not load (vermagic, and the structures
-this module reads), and points at `docs/build.md`. `post-fs-data.sh` loads the module as early as it
-can and `service.sh` retries; both use the bundled `lkmloader` and log its exit code to
-`state/sync.log` (`lkmloader ... debug=1` names things in dmesg for 60 seconds).
+Disable, update or uninstall through the native module controls and reboot; never hot-unload. To roll back a failed candidate, disable this package, restore the old cq switch if desired, and reboot normally. The old switch is never changed automatically.
+
+The module is GPL-2.0; LICENSE and NOTICE accompany the code/runtime dependencies. The source and normal build entry are at https://github.com/kafuuchino-s/hma-uidfake on mix4-5.4.

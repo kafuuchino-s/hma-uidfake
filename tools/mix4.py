@@ -176,7 +176,9 @@ def package(args):
     commit = run(['git', 'rev-parse', 'HEAD'], cwd=ROOT)
     tree = run(['git', 'rev-parse', 'HEAD^{tree}'], cwd=ROOT)
     out = Path(args.out).resolve(); output_dir(out.parent)
-    contents = {p.name: p.read_bytes() for p in (ROOT / 'module').iterdir() if p.is_file()}
+    module_files = ['module.prop', 'common.sh', 'customize.sh', 'post-fs-data.sh', 'service.sh',
+                    'action.sh', 'uninstall.sh', 'README.md', 'skip_mount']
+    contents = {name: (ROOT / 'module' / name).read_bytes() for name in module_files}
     for name in APPROVED['payloads']:
         contents['ko/' + name if name.endswith('.ko') else name] = (artifacts / name).read_bytes()
     contents['LICENSE'] = (ROOT / 'LICENSE').read_bytes()
